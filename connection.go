@@ -9,7 +9,6 @@ import (
 type Connection struct {
 	ws       *websocket.Conn
 	messages chan []byte
-	cancel   chan bool
 }
 
 func broadcastMessage(messageType int, message []byte) {
@@ -33,48 +32,43 @@ func handleConnectionError(connection *Connection, err error) {
 
 func (connection *Connection) WriteMessages(hub *Hub) {
 	for {
-		select {
-		case <-connection.cancel:
-			return
-		default:
-			message := <-connection.messages
-			err := connection.ws.WriteMessage(websocket.TextMessage, message)
+		message := <-connection.messages
 
-			if err != nil {
-				handleConnectionError(connection, err)
-				return
-			}
+		if message == nil {
+			return
+		}
+
+		err := connection.ws.WriteMessage(websocket.TextMessage, message)
+
+		if err != nil {
+			handleConnectionError(connection, err)
 		}
 	}
 }
 
 func (connection *Connection) ReadMessages(hub *Hub) {
 	for {
-		select {
-		case <-connection.cancel:
-			break
-		default:
-			messageType, message, err := connection.ws.ReadMessage()
+		fmt.Println("Reading ... ")
+		messageType, message, err := connection.ws.ReadMessage()
 
-			if err != nil {
-				handleConnectionError(connection, err)
-				return
-			} else {
-				broadcastMessage(messageType, message);
-			}
+		if err != nil {
+			handleConnectionError(connection, err)
+			return
+		} else {
+			fmt.Println("Read." + string(message))
+			broadcastMessage(messageType, message)
 		}
 	}
 }
 
 func (connection *Connection) Close() {
+	close(connection.messages)
 	connection.ws.Close()
-	connection.cancel <- true
 }
 
 func NewConnection(ws *websocket.Conn) *Connection {
 	return &Connection{
 		ws: ws,
 		messages: make(chan []byte, 256),
-		cancel: make(chan bool, 1),
 	}
 }
